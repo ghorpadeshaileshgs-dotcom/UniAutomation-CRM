@@ -1,0 +1,139 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Default Deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper Functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isEmailVerified() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function getRole() {
+      return getUserData().role;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && getRole() == 'Admin';
+    }
+
+    function isSales() {
+      return isSignedIn() && (getRole() == 'Sales' || getRole() == 'BDM' || getRole() == 'Sales Support' || getRole() == 'Admin');
+    }
+
+    function isDesign() {
+      return isSignedIn() && (getRole() == 'Design' || getRole() == 'Admin');
+    }
+
+    function isAccounts() {
+      return isSignedIn() && (getRole() == 'Accounts' || getRole() == 'Admin');
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    // Collection: Users
+    match /users/{userId} {
+      allow read: if isSignedIn();
+      // Only Admin can create users (via API, but we allow sync here if needed)
+      // Actually, Admin can write to any user
+      allow write: if isAdmin();
+      // Users can update their own non-role fields
+      allow update: if isSignedIn() && request.auth.uid == userId 
+                    && request.resource.data.role == resource.data.role;
+    }
+
+    // Collection: Leads
+    match /leads/{leadId} {
+      allow read: if isSignedIn();
+      allow create: if isSales();
+      allow update: if isSales() || isDesign();
+      allow delete: if isAdmin();
+    }
+
+    // Collection: Tasks
+    match /tasks/{taskId} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn();
+    }
+
+    // Collection: Customers
+    match /customers/{customerId} {
+      allow read: if isSignedIn();
+      allow create, update: if isSales();
+      allow delete: if isAdmin();
+    }
+
+    // Collection: Parts
+    match /parts/{partId} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn();
+    }
+
+    // Collection: Quotations
+    match /quotes/{quoteId} {
+      allow read: if isSignedIn();
+      allow create, update: if isSales();
+      allow delete: if isAdmin();
+    }
+
+    // Collection: Feasibility Forms
+    match /feasibility_forms/{formId} {
+      allow read: if isSignedIn();
+      allow write: if isDesign() || isSales();
+    }
+
+    // Collection: Sales Orders
+    match /sales_orders/{orderId} {
+      allow read: if isSignedIn();
+      allow create, update: if isSales() || isAccounts();
+      allow delete: if isAdmin();
+    }
+
+    // Collection: Invoices
+    match /invoices/{invoiceId} {
+      allow read: if isSignedIn();
+      allow write: if isAccounts();
+    }
+
+    // Collection: Targets
+    match /targets/{targetId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // Collection: System Settings
+    match /system/settings {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // Collection: Backups
+    match /backups/{backupId} {
+      allow read, write: if isAdmin();
+    }
+
+    // Supporting collections
+    match /departments/{id} { allow read: if isSignedIn(); allow write: if isAdmin(); }
+    match /employees/{id} { allow read: if isSignedIn(); allow write: if isAdmin(); }
+    match /industries/{id} { allow read: if isSignedIn(); allow write: if isAdmin(); }
+    match /customer_types/{id} { allow read: if isSignedIn(); allow write: if isAdmin(); }
+    match /design_reviews/{id} { allow read: if isSignedIn(); allow write: if isDesign(); }
+    match /debtors/{id} { allow read: if isSignedIn(); allow write: if isAccounts(); }
+    match /complaints/{id} { allow read: if isSignedIn(); allow write: if isSales() || isAccounts(); }
+    match /technical_templates/{id} { allow read: if isSignedIn(); allow write: if isDesign(); }
+    match /forecasts/{id} { allow read: if isSignedIn(); allow write: if isSales() || isAdmin(); }
+    match /approvals/{id} { allow read: if isSignedIn(); allow write: if isSignedIn(); }
+  }
+}

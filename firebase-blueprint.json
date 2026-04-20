@@ -1,0 +1,360 @@
+{
+  "entities": {
+    "Lead": {
+      "title": "Lead",
+      "description": "A sales lead in the CRM",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Auto-generated Lead ID" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Date the lead was created" },
+        "customerName": { "type": "string", "description": "Name of the customer company" },
+        "contactPerson": { "type": "string", "description": "Primary contact person" },
+        "industry": { "type": "string", "enum": ["Defence", "Locomotive", "Industrial", "Automobile", "Other"] },
+        "region": { "type": "string", "enum": ["Domestic", "Export"] },
+        "productType": { "type": "string", "description": "Type of product interested in" },
+        "productCategory": { "type": "string", "enum": ["Standard", "New Development", "Variant"] },
+        "stage": { 
+          "type": "string", 
+          "enum": ["Lead", "Qualified", "Requirement Understanding", "Techno-Commercial Offer", "Quoted", "Follow-up", "Negotiation", "PO Expected", "PO Received", "Closed Won", "Closed Lost"] 
+        },
+        "salespersonName": { "type": "string", "description": "Assigned sales person name/email" },
+        "salespersonId": { "type": "string", "description": "Assigned sales person UID" },
+        "source": { "type": "string", "enum": ["Email", "Call", "Visit", "Reference"] },
+        "estimatedValue": { "type": "number", "description": "Estimated value of the opportunity" },
+        "probability": { "type": "number", "description": "Probability of winning (0-100)" },
+        "quoteCreated": { "type": "boolean", "description": "Whether a quote has been created" },
+        "quoteValue": { "type": "number", "description": "Value of the quote" },
+        "quoteDate": { "type": "string", "format": "date-time", "description": "Date the quote was issued" },
+        "poReceived": { "type": "boolean", "description": "Whether a PO has been received" },
+        "poNumber": { "type": "string", "description": "Purchase Order number" },
+        "poValue": { "type": "number", "description": "Value of the PO" },
+        "poDate": { "type": "string", "format": "date-time", "description": "Date the PO was received" },
+        "feasibilityStatus": { "type": "string", "enum": ["Pending", "Feasible", "Not Feasible", "Feasible with Modification"] },
+        "lostReason": { "type": "string", "description": "Reason for losing the deal" },
+        "requirementDetails": { "type": "string", "description": "Details of the customer requirement" }
+      },
+      "required": ["customerName", "contactPerson", "industry", "region", "stage", "salespersonName", "salespersonId"]
+    },
+    "Task": {
+      "title": "Task",
+      "description": "A task or activity related to a lead or customer",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "relatedTo": { "type": "string", "enum": ["Lead", "Customer", "General"] },
+        "leadId": { "type": "string", "description": "Reference to the Lead ID (if applicable)" },
+        "customerId": { "type": "string", "description": "Reference to the Customer ID (if applicable)" },
+        "customerName": { "type": "string", "description": "Name of the customer for display" },
+        "date": { "type": "string", "format": "date-time", "description": "Activity Date" },
+        "type": { "type": "string", "enum": ["Call", "Visit", "Email", "Customer Query", "Internal Coordination", "Payment Follow-up", "Technical Support"] },
+        "priority": { "type": "string", "enum": ["High", "Medium", "Low"] },
+        "departmentTag": { "type": "string" },
+        "summary": { "type": "string", "description": "Activity Summary" },
+        "nextAction": { "type": "string", "description": "Next Action" },
+        "nextActionDate": { "type": "string", "format": "date-time", "description": "Next Action Date (mandatory)" },
+        "owner": { "type": "string", "description": "Task Owner Name" },
+        "ownerId": { "type": "string", "description": "Task Owner UID" },
+        "status": { "type": "string", "enum": ["Pending Approval", "Authorized", "Completed"] },
+        "authorizedBy": { "type": "string" },
+        "authorizedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["relatedTo", "date", "type", "nextAction", "nextActionDate", "owner", "ownerId", "status"]
+    },
+    "User": {
+      "title": "User",
+      "description": "User profile and role",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string" },
+        "displayName": { "type": "string" },
+        "role": { "type": "string", "enum": ["Admin", "Sales", "BDM", "Sales Support"] },
+        "assignedIndustry": { "type": "string", "enum": ["Defence", "Locomotive", "Industrial", "Automobile", "Other"] }
+      },
+      "required": ["uid", "email", "role"]
+    },
+    "Customer": {
+      "title": "Customer",
+      "description": "Existing or Potential Customer",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "type": { "type": "string", "enum": ["Existing", "Potential"] },
+        "contactPerson": { "type": "string" },
+        "email": { "type": "string" },
+        "phone": { "type": "string" },
+        "industry": { "type": "string" },
+        "region": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "type", "industry", "region"]
+    },
+    "Part": {
+      "title": "Part",
+      "description": "Product Part details",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "partNumber": { "type": "string" },
+        "partName": { "type": "string" },
+        "description": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["partNumber", "partName"]
+    },
+    "Debtor": {
+      "title": "Debtor",
+      "description": "Debtors list / Invoices",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "customerName": { "type": "string" },
+        "invoiceNumber": { "type": "string" },
+        "invoiceDate": { "type": "string", "format": "date-time" },
+        "amount": { "type": "number" },
+        "dueDate": { "type": "string", "format": "date-time" },
+        "status": { "type": "string", "enum": ["Pending", "Paid", "Overdue"] },
+        "salespersonName": { "type": "string" },
+        "salespersonId": { "type": "string" },
+        "lastFollowUp": { "type": "string", "format": "date-time" },
+        "nextFollowUp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["customerName", "invoiceNumber", "amount", "dueDate", "status", "salespersonId"]
+    },
+    "DesignReview": {
+      "title": "Design Review",
+      "description": "Technical feasibility review request",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "leadId": { "type": "string" },
+        "customerName": { "type": "string" },
+        "requestedBy": { "type": "string" },
+        "requestedById": { "type": "string" },
+        "assignedTo": { "type": "string" },
+        "assignedToId": { "type": "string" },
+        "requestDate": { "type": "string", "format": "date-time" },
+        "requirementSummary": { "type": "string" },
+        "attachments": { "type": "array", "items": { "type": "string" } },
+        "feasibilityStatus": { "type": "string", "enum": ["Pending", "Feasible", "Not Feasible", "Feasible with Modification"] },
+        "status": { "type": "string", "enum": ["Pending", "In Review", "Completed", "Delayed"] },
+        "slaDays": { "type": "number" },
+        "isDelayed": { "type": "boolean" },
+        "responseDate": { "type": "string", "format": "date-time" },
+        "responseRemarks": { "type": "string" },
+        "turnaroundTime": { "type": "number" }
+      },
+      "required": ["leadId", "requestedById", "requestDate", "feasibilityStatus"]
+    },
+    "Department": {
+      "title": "Department",
+      "description": "Organizational department",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "createdAt"]
+    },
+    "Employee": {
+      "title": "Employee",
+      "description": "Staff member",
+      "type": "object",
+      "properties": {
+        "employeeId": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "phone": { "type": "string" },
+        "departmentId": { "type": "string" },
+        "departmentName": { "type": "string" },
+        "designation": { "type": "string" },
+        "role": { "type": "string", "enum": ["Admin", "Sales", "BDM", "Sales Support", "Design", "Other"] },
+        "status": { "type": "string", "enum": ["Active", "Inactive"] },
+        "joiningDate": { "type": "string", "format": "date-time" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["employeeId", "name", "email", "departmentId", "departmentName", "designation", "role", "status", "createdAt"]
+    },
+    "Quote": {
+      "title": "Quote",
+      "description": "Sales quotation",
+      "type": "object",
+      "properties": {
+        "quoteNumber": { "type": "string" },
+        "leadId": { "type": "string" },
+        "customerId": { "type": "string" },
+        "customerName": { "type": "string" },
+        "contactPerson": { "type": "string" },
+        "date": { "type": "string", "format": "date-time" },
+        "validUntil": { "type": "string", "format": "date-time" },
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "partId": { "type": "string" },
+              "partNumber": { "type": "string" },
+              "partName": { "type": "string" },
+              "description": { "type": "string" },
+              "quantity": { "type": "number" },
+              "unitPrice": { "type": "number" },
+              "totalPrice": { "type": "number" }
+            }
+          }
+        },
+        "subtotal": { "type": "number" },
+        "taxRate": { "type": "number" },
+        "taxAmount": { "type": "number" },
+        "totalAmount": { "type": "number" },
+        "standardTerms": { "type": "array", "items": { "type": "string" } },
+        "specialTerms": { "type": "string" },
+        "status": { "type": "string", "enum": ["Draft", "Sent", "Accepted", "Rejected", "Expired"] },
+        "createdBy": { "type": "string" },
+        "createdById": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["quoteNumber", "leadId", "customerId", "customerName", "date", "validUntil", "items", "totalAmount", "status", "createdById", "createdAt"]
+    },
+    "Complaint": {
+      "title": "Complaint",
+      "description": "Customer complaint record",
+      "type": "object",
+      "properties": {
+        "complaintId": { "type": "string" },
+        "customerName": { "type": "string" },
+        "customerId": { "type": "string" },
+        "leadId": { "type": "string" },
+        "projectId": { "type": "string" },
+        "productType": { "type": "string" },
+        "complaintDate": { "type": "string", "format": "date-time" },
+        "complaintSource": { "type": "string", "enum": ["Email", "Call", "Visit"] },
+        "complaintType": { "type": "string", "enum": ["Quality", "Functional Failure", "Fitment", "Delivery", "Documentation"] },
+        "severity": { "type": "string", "enum": ["Critical", "Major", "Minor"] },
+        "description": { "type": "string" },
+        "assignedTo": { "type": "string" },
+        "assignedToId": { "type": "string" },
+        "status": { "type": "string", "enum": ["Open", "Under Investigation", "Action Implemented", "Closed"] },
+        "rootCause": { "type": "string" },
+        "correctiveAction": { "type": "string" },
+        "preventiveAction": { "type": "string" },
+        "responseDate": { "type": "string", "format": "date-time" },
+        "closureDate": { "type": "string", "format": "date-time" },
+        "turnaroundTime": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["complaintId", "customerName", "complaintDate", "complaintSource", "complaintType", "severity", "description", "status", "createdAt"]
+    },
+    "TechnicalTemplate": {
+      "title": "Technical Template",
+      "description": "Template for product-specific technical parameters",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "category": { "type": "string" },
+        "subCategory": { "type": "string" },
+        "parameters": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": { "type": "string" },
+              "label": { "type": "string" },
+              "type": { "type": "string", "enum": ["select", "text", "number"] },
+              "options": { "type": "array", "items": { "type": "string" } },
+              "required": { "type": "boolean" }
+            }
+          }
+        },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["category", "subCategory", "parameters", "createdAt"]
+    },
+    "FeasibilityForm": {
+      "title": "Feasibility Form",
+      "description": "Submitted technical feasibility details for a lead",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "leadId": { "type": "string" },
+        "templateId": { "type": "string" },
+        "category": { "type": "string" },
+        "subCategory": { "type": "string" },
+        "parameters": { 
+          "type": "object",
+          "description": "Map of parameter names to objects containing value, designStatus, suggestion, and remark"
+        },
+        "submittedBy": { "type": "string" },
+        "submittedById": { "type": "string" },
+        "status": { "type": "string", "enum": ["Open", "Closed"] },
+        "overallStatus": { "type": "string", "enum": ["Pending", "Feasible", "Not Feasible", "Need More Details"] },
+        "designResponse": { "type": "string" },
+        "feasibilityStatus": { "type": "string", "enum": ["Pending", "Feasible", "Not Feasible", "Feasible with Modification"] },
+        "revisionCount": { "type": "integer" },
+        "history": { 
+          "type": "array",
+          "items": { "type": "object" }
+        },
+        "turnaroundTime": { "type": "number", "description": "Hours taken for first review" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["leadId", "category", "subCategory", "parameters", "submittedById", "status", "overallStatus", "revisionCount", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/leads/{leadId}": {
+      "schema": "Lead",
+      "description": "Collection of sales leads"
+    },
+    "/leads/{leadId}/tasks/{taskId}": {
+      "schema": "Task",
+      "description": "Tasks associated with a specific lead"
+    },
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profiles"
+    },
+    "/customers/{customerId}": {
+      "schema": "Customer",
+      "description": "Collection of customers"
+    },
+    "/parts/{partId}": {
+      "schema": "Part",
+      "description": "Collection of parts"
+    },
+    "/debtors/{debtorId}": {
+      "schema": "Debtor",
+      "description": "Collection of debtors/invoices"
+    },
+    "/design_reviews/{reviewId}": {
+      "schema": "DesignReview",
+      "description": "Technical design reviews"
+    },
+    "/departments/{departmentId}": {
+      "schema": "Department",
+      "description": "Collection of departments"
+    },
+    "/employees/{employeeId}": {
+      "schema": "Employee",
+      "description": "Collection of employees"
+    },
+    "/quotes/{quoteId}": {
+      "schema": "Quote",
+      "description": "Collection of sales quotations"
+    },
+    "/complaints/{complaintId}": {
+      "schema": "Complaint",
+      "description": "Collection of customer complaints"
+    },
+    "/technical_templates/{templateId}": {
+      "schema": "TechnicalTemplate",
+      "description": "Templates for technical feasibility reviews"
+    },
+    "/feasibility_forms/{formId}": {
+      "schema": "FeasibilityForm",
+      "description": "Technical feasibility form submissions"
+    }
+  }
+}
