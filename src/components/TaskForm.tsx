@@ -61,15 +61,11 @@ export default function TaskForm({ leads, customers, onClose, initialData }: Tas
     priority: initialData?.priority || 'Medium'
   });
 
-  // FIX: User selection using employees master
-  const activeEmployees = employees.filter(emp => 
-    emp.status === 'Active' && (deptFilter === 'all' || emp.departmentId === deptFilter)
-  );
-  
-  const activeTeam = activeEmployees.length > 0 ? activeEmployees : employees.filter(e => e.status === 'Active');
-  
-  console.log("Employees for Task Assignment:", employees);
-  console.log("Active Employees (filtered or fallback):", activeTeam);
+  // FIX 3: All active employees from Employee Master
+  const activeTeam = employees.filter(e => e.status === 'Active');
+  // Optional dept filter for display purposes
+  const displayTeam = deptFilter === 'all' ? activeTeam : activeTeam.filter(e => e.departmentId === deptFilter);
+  const teamToShow = displayTeam.length > 0 ? displayTeam : activeTeam;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -252,7 +248,7 @@ export default function TaskForm({ leads, customers, onClose, initialData }: Tas
               <Select 
                 value={formData.assignedTo} 
                 onValueChange={v => {
-                  const emp = activeTeam.find(m => m.id === v);
+                  const emp = activeTeam.find(e => e.id === v);
                   setFormData({
                     ...formData, 
                     assignedTo: v, 
@@ -265,9 +261,9 @@ export default function TaskForm({ leads, customers, onClose, initialData }: Tas
                   <SelectValue placeholder="Select team member" />
                 </SelectTrigger>
                 <SelectContent>
-                  {activeTeam.map(emp => (
+                  {teamToShow.map(emp => (
                     <SelectItem key={emp.id} value={emp.id}>
-                      {emp.name || (emp as any).employeeName} ({emp.role})
+                      {emp.name || (emp as any).employeeName} ({emp.employeeId})
                     </SelectItem>
                   ))}
                 </SelectContent>

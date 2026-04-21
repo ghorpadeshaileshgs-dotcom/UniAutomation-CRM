@@ -1,12 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  collection, 
-  query, 
-  onSnapshot, 
-  orderBy, 
   Timestamp,
-  collectionGroup,
-  where,
   updateDoc,
   doc
 } from 'firebase/firestore';
@@ -25,7 +19,8 @@ import {
   User as UserIcon,
   Users as UsersIcon,
   MessageSquare,
-  ShieldCheck
+  ShieldCheck,
+  TrendingUp
 } from 'lucide-react';
 import { format, isToday, isPast, isFuture } from 'date-fns';
 import { toast } from 'sonner';
@@ -41,24 +36,17 @@ import ExportActions from './ExportActions';
 export default function TaskBoard({ leads }: TaskBoardProps) {
   const { tasks, profile, user, customers } = useFirebase();
   const [showTaskForm, setShowTaskForm] = useState(false);
-
   const [filterMode, setFilterMode] = useState<'all' | 'mine'>('mine');
 
   const filteredTasks = tasks.filter(t => {
-    // Stage 1: User Filter
     if (filterMode === 'mine' && t.ownerId !== user?.uid) return false;
-
-    // Stage 2: Lead Linkage Filter
-    // If the task is linked to a lead, check if that lead exists in the currently filtered 'leads' prop
     if (t.leadId) {
       return leads.some(l => l.id === t.leadId);
     }
-
-    // General tasks (not linked to lead) stay unless we want to filter them too.
-    // For now, let's keep them so they don't disappear when filtering leads.
     return true;
   });
 
+  // FIX 6: Export includes status and dueDate
   const exportData = React.useMemo(() => {
     return filteredTasks.map(t => ({
       summary: t.summary,
@@ -68,7 +56,8 @@ export default function TaskBoard({ leads }: TaskBoardProps) {
       owner: t.assignedToName || t.owner,
       customer: t.customerName,
       date: t.date,
-      next_action: t.nextAction
+      next_action: t.nextAction,
+      due_date: t.nextActionDate?.toDate().toLocaleDateString('en-IN'),
     }));
   }, [filteredTasks]);
 
@@ -100,10 +89,15 @@ export default function TaskBoard({ leads }: TaskBoardProps) {
 
   const pendingApproval = filteredTasks.filter(t => t.status === 'Pending Approval');
   const authorizedTasks = filteredTasks.filter(t => t.status === 'Authorized');
+  const completedTasks = filteredTasks.filter(t => t.status === 'Completed');
   
   const overdueTasks = authorizedTasks.filter(t => isPast(t.nextActionDate.toDate()) && !isToday(t.nextActionDate.toDate()));
   const todayTasks = authorizedTasks.filter(t => isToday(t.nextActionDate.toDate()));
   const upcomingTasks = authorizedTasks.filter(t => isFuture(t.nextActionDate.toDate()) && !isToday(t.nextActionDate.toDate()));
+
+  const completionRate = filteredTasks.length > 0 
+    ? Math.round(completedTasks.length / filteredTasks.length * 100) 
+    : 0;
 
   return (
     <div className="space-y-8">
@@ -152,7 +146,8 @@ export default function TaskBoard({ leads }: TaskBoardProps) {
         </div>
       </div>
 
-      <div className={`grid grid-cols-1 ${isAdmin ? 'lg:grid-cols-4' : 'md:grid-cols-3'} gap-6`}>
+      {/* Task Kanban Grid — FIX 6: 4 cols (non-admin) / 5 cols (admin) */}
+      <div className={`grid grid-cols-1 ${isAdmin ? 'md:grid-cols-5' : 'md:grid-cols-4'} gap-6`}>
         {isAdmin && (
           <TaskColumn 
             title="Pending Approval" 
@@ -196,6 +191,34 @@ export default function TaskBoard({ leads }: TaskBoardProps) {
           actionIcon={<CheckCircle2 size={20} />}
           actionLabel="Complete"
         />
+        {/* FIX 6: Completed column */}
+        <TaskColumn 
+          title="Completed" 
+          tasks={completedTasks} 
+          leads={leads}
+          color="border-green-500" 
+          bgColor="bg-green-50/10"
+          isCompleted
+          onAction={() => {}}
+          actionIcon={<CheckCircle2 size={20} />}
+          actionLabel=""
+        />
+      </div>
+
+      {/* FIX 6: Task Summary Report */}
+      <div className="space-y-3">
+        <div className="flex items-center gap-2">
+          <TrendingUp size={16} className="text-slate-500" />
+          <h3 className="text-sm font-bold text-slate-700 uppercase tracking-wider">Task Summary Report</h3>
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+          <SummaryCard label="Total Tasks" value={filteredTasks.length} color="text-slate-800" bg="bg-slate-50" border="border-slate-200" />
+          <SummaryCard label="Completed" value={completedTasks.length} color="text-emerald-700" bg="bg-emerald-50" border="border-emerald-200" />
+          <SummaryCard label="Overdue" value={overdueTasks.length} color="text-red-700" bg="bg-red-50" border="border-red-200" />
+          <SummaryCard label="Due Today" value={todayTasks.length} color="text-blue-700" bg="bg-blue-50" border="border-blue-200" />
+          <SummaryCard label="Upcoming" value={upcomingTasks.length} color="text-slate-600" bg="bg-slate-100" border="border-slate-200" />
+          <SummaryCard label="Completion Rate" value={`${completionRate}%`} color="text-violet-700" bg="bg-violet-50" border="border-violet-200" />
+        </div>
       </div>
 
       {showTaskForm && (
@@ -209,13 +232,23 @@ export default function TaskBoard({ leads }: TaskBoardProps) {
   );
 }
 
-function TaskColumn({ title, tasks, leads, color, bgColor, isOverdue, onAction, actionIcon, actionLabel }: { 
+function SummaryCard({ label, value, color, bg, border }: { label: string; value: string | number; color: string; bg: string; border: string }) {
+  return (
+    <div className={`${bg} border ${border} rounded-xl p-3 text-center`}>
+      <p className={`text-xl font-bold ${color}`}>{value}</p>
+      <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mt-0.5">{label}</p>
+    </div>
+  );
+}
+
+function TaskColumn({ title, tasks, leads, color, bgColor, isOverdue, isCompleted, onAction, actionIcon, actionLabel }: { 
   title: string, 
   tasks: Task[], 
   leads: Lead[],
   color: string,
   bgColor?: string,
   isOverdue?: boolean,
+  isCompleted?: boolean,
   onAction: (task: Task) => void,
   actionIcon: React.ReactNode,
   actionLabel: string
@@ -234,12 +267,13 @@ function TaskColumn({ title, tasks, leads, color, bgColor, isOverdue, onAction, 
         ) : (
           tasks.map(task => {
             return (
-              <Card key={task.id} className={`shadow-sm hover:shadow-md transition-all ${isOverdue ? 'border-red-200' : ''}`}>
+              <Card key={task.id} className={`shadow-sm hover:shadow-md transition-all ${isOverdue ? 'border-red-200' : isCompleted ? 'border-green-200 opacity-80' : ''}`}>
                 <CardHeader className="p-4 pb-2">
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex-1">
                       <div className="flex items-center gap-2 mb-1">
                         {isOverdue && <Badge variant="destructive" className="py-0 h-4 text-[10px] animate-pulse">OVERDUE</Badge>}
+                        {isCompleted && <Badge className="py-0 h-4 text-[10px] bg-emerald-100 text-emerald-700">DONE</Badge>}
                         <Badge variant="outline" className="text-[10px] h-4 px-1 uppercase">
                           {task.relatedTo}
                         </Badge>
@@ -251,15 +285,18 @@ function TaskColumn({ title, tasks, leads, color, bgColor, isOverdue, onAction, 
                         {task.nextAction}
                       </CardTitle>
                     </div>
-                    <Button 
-                      variant="ghost" 
-                      size="icon" 
-                      title={actionLabel}
-                      className={`h-8 w-8 text-slate-400 hover:text-green-600 ${isOverdue ? 'hover:bg-red-50' : ''}`}
-                      onClick={() => onAction(task)}
-                    >
-                      {actionIcon}
-                    </Button>
+                    {/* Hide action button for completed tasks */}
+                    {!isCompleted && (
+                      <Button 
+                        variant="ghost" 
+                        size="icon" 
+                        title={actionLabel}
+                        className={`h-8 w-8 text-slate-400 hover:text-green-600 ${isOverdue ? 'hover:bg-red-50' : ''}`}
+                        onClick={() => onAction(task)}
+                      >
+                        {actionIcon}
+                      </Button>
+                    )}
                   </div>
                 </CardHeader>
                 <CardContent className="p-4 pt-0 space-y-3">

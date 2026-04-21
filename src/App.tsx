@@ -402,6 +402,7 @@ export default function App() {
                 targets={targets}
                 customers={customers}
                 parts={parts}
+                onNavigate={(tab) => setActiveTab(tab)}
               />
             )}
             
@@ -473,7 +474,7 @@ export default function App() {
             )}
             {activeTab === 'masters' && (
               <Tabs defaultValue="customers" className="space-y-6">
-                <TabsList className="bg-white p-1 shadow-sm border border-slate-200">
+                <TabsList className="bg-white p-1 shadow-sm border border-slate-200 flex flex-wrap gap-1 h-auto">
                   <TabsTrigger value="customers" className="gap-2">
                     <Building2 size={16} />
                     Customers
@@ -694,6 +695,7 @@ export default function App() {
               <ComplaintForm 
                 customers={customers}
                 employees={employees}
+                parts={parts}
                 onSubmit={addComplaint}
                 onCancel={() => setShowComplaintForm(false)}
               />

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Complaint, ComplaintSource, ComplaintType, ComplaintSeverity, ComplaintStatus, Customer, Employee } from '../types';
+import { Complaint, ComplaintSource, ComplaintType, ComplaintSeverity, ComplaintStatus, Customer, Employee, Part } from '../types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -17,12 +17,13 @@ import { toast } from 'sonner';
 interface ComplaintFormProps {
   customers: Customer[];
   employees: Employee[];
+  parts: Part[];
   onSubmit: (complaint: Omit<Complaint, 'id' | 'createdAt'>) => Promise<any>;
   onCancel: () => void;
   initialData?: Complaint;
 }
 
-export default function ComplaintForm({ customers, employees, onSubmit, onCancel, initialData }: ComplaintFormProps) {
+export default function ComplaintForm({ customers, employees, parts, onSubmit, onCancel, initialData }: ComplaintFormProps) {
   const [formData, setFormData] = useState<Partial<Complaint>>(initialData || {
     complaintId: `CMP-${Date.now().toString().slice(-6)}`,
     complaintDate: Timestamp.now(),
@@ -32,6 +33,8 @@ export default function ComplaintForm({ customers, employees, onSubmit, onCancel
     status: 'Open',
     customerName: '',
     productType: '',
+    partId: '',
+    partNo: '',
     description: '',
     assignedTo: '',
     assignedToId: ''
@@ -43,6 +46,10 @@ export default function ComplaintForm({ customers, employees, onSubmit, onCancel
     e.preventDefault();
     if (!formData.customerName || !formData.description) {
       toast.error("Please fill in all required fields");
+      return;
+    }
+    if (!formData.partNo) {
+      toast.error("Please select a Part No.");
       return;
     }
 
@@ -101,13 +108,42 @@ export default function ComplaintForm({ customers, employees, onSubmit, onCancel
           />
         </div>
 
+        {/* FIX 9: Part No. dropdown + auto-filled Part Name */}
         <div className="space-y-2">
-          <Label htmlFor="productType">Product Type</Label>
+          <Label>Part No. *</Label>
+          <Select 
+            value={formData.partId} 
+            onValueChange={(val) => {
+              const part = parts.find(p => p.id === val);
+              setFormData({ 
+                ...formData, 
+                partId: part?.id || '', 
+                partNo: part?.partId || '',
+                productType: part?.partName || ''
+              });
+            }}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Select Part No." />
+            </SelectTrigger>
+            <SelectContent>
+              {parts.map(part => (
+                <SelectItem key={part.id} value={part.id}>
+                  {part.partId} – {part.partName}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="productType">Product / Part Name</Label>
           <Input 
             id="productType" 
             value={formData.productType || ''} 
-            onChange={(e) => setFormData({ ...formData, productType: e.target.value })}
-            placeholder="e.g. Pressure Sensor X1"
+            readOnly
+            className="bg-slate-50"
+            placeholder="Auto-filled from Part No."
           />
         </div>
 

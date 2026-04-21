@@ -16,6 +16,34 @@ if (SENDGRID_API_KEY) {
 }
 
 /**
+ * SHARED HELPER: Resolve email + name for a given ID.
+ * Looks up users collection first, then falls back to employees collection.
+ */
+async function resolveEmail(id: string): Promise<{ email: string; name: string } | null> {
+  if (!id) return null;
+
+  // Try users collection first
+  let docSnap = await db.collection("users").doc(id).get();
+  if (docSnap.exists && docSnap.data()?.email) {
+    return {
+      email: docSnap.data()!.email,
+      name: docSnap.data()!.displayName || docSnap.data()!.name || "",
+    };
+  }
+
+  // Fallback: try employees collection
+  docSnap = await db.collection("employees").doc(id).get();
+  if (docSnap.exists && docSnap.data()?.email) {
+    return {
+      email: docSnap.data()!.email,
+      name: docSnap.data()!.name || docSnap.data()!.employeeName || "",
+    };
+  }
+
+  return null;
+}
+
+/**
  * 1. TASK CREATION EMAIL
  * Triggered whenever a new task is created in Firestore.
  */
@@ -26,29 +54,24 @@ export const onTaskCreated = functions.firestore.onDocumentCreated("tasks/{taskI
   const taskId = event.params.taskId;
 
   try {
-    // Fetch assigned user details
-    const userDoc = await db.collection("users").doc(task.ownerId).get();
-    if (!userDoc.exists) {
-      console.warn(`User ${task.ownerId} not found for task ${taskId}`);
-      return;
-    }
-    const user = userDoc.data();
-    const email = user?.email;
+    // Use assignedTo first, fall back to ownerId
+    const assigneeId = task.assignedTo || task.ownerId;
+    const assignee = await resolveEmail(assigneeId);
 
-    if (!email) {
-      console.warn(`Email not found for user ${task.ownerId}`);
+    if (!assignee) {
+      console.warn(`Assignee not found for task ${taskId} (id: ${assigneeId})`);
       return;
     }
 
     const priorityTag = task.priority === "High" ? "[HIGH PRIORITY] " : "";
     const msg = {
-      to: email,
+      to: assignee.email,
       from: FROM_EMAIL,
       subject: `${priorityTag}New Task Assigned: ${task.type}`,
       html: `
         <div style="font-family: sans-serif; padding: 20px; color: #333; line-height: 1.5;">
           <h2 style="color: #2563eb; border-bottom: 2px solid #e5e7eb; padding-bottom: 10px;">New Task Notification</h2>
-          <p>Hello <strong>${user?.displayName || "Team Member"}</strong>,</p>
+          <p>Hello <strong>${assignee.name || "Team Member"}</strong>,</p>
           <p>A new task has been assigned to you in the Sales Management Portal.</p>
           
           <div style="background-color: #f9fafb; padding: 20px; border-radius: 12px; border: 1px solid #e5e7eb; margin: 20px 0;">
@@ -99,7 +122,7 @@ export const onTaskCreated = functions.firestore.onDocumentCreated("tasks/{taskI
 
     if (SENDGRID_API_KEY) {
       await sgMail.send(msg);
-      console.log(`Creation email sent successfully to ${email} for task ${taskId}`);
+      console.log(`Creation email sent successfully to ${assignee.email} for task ${taskId}`);
     } else {
       console.warn("SendGrid API Key not configured. Email skipped.");
     }
@@ -110,7 +133,7 @@ export const onTaskCreated = functions.firestore.onDocumentCreated("tasks/{taskI
 
 /**
  * 2. TASK REASSIGNMENT EMAIL
- * Triggered when a task's ownerId changes.
+ * Triggered when a task's assignedTo or ownerId changes.
  */
 export const onTaskUpdated = functions.firestore.onDocumentUpdated("tasks/{taskId}", async (event) => {
   const before = event.data?.before.data();
@@ -119,26 +142,25 @@ export const onTaskUpdated = functions.firestore.onDocumentUpdated("tasks/{taskI
 
   const taskId = event.params.taskId;
 
-  // Trigger only if the owner (assigned user) has changed
-  if (before.ownerId !== after.ownerId) {
-    try {
-      const userDoc = await db.collection("users").doc(after.ownerId).get();
-      if (!userDoc.exists) return;
-      const user = userDoc.data();
-      const email = user?.email;
+  // Trigger only if the assignee has changed
+  const beforeAssignee = before.assignedTo || before.ownerId;
+  const afterAssignee = after.assignedTo || after.ownerId;
 
-      if (!email) return;
+  if (beforeAssignee !== afterAssignee) {
+    try {
+      const assignee = await resolveEmail(afterAssignee);
+      if (!assignee?.email) return;
 
       const priorityTag = after.priority === "High" ? "[HIGH PRIORITY] " : "";
       const msg = {
-        to: email,
+        to: assignee.email,
         from: FROM_EMAIL,
         subject: `${priorityTag}Task Reassigned to You: ${after.type}`,
         html: `
           <div style="font-family: sans-serif; padding: 20px; color: #333; line-height: 1.5;">
             <h2 style="color: #2563eb; border-bottom: 2px solid #e5e7eb; padding-bottom: 10px;">Task Reassignment Notification</h2>
-            <p>Hello <strong>${user?.displayName || "Team Member"}</strong>,</p>
-            <p>A task has been reassigned to you from <strong>${before.owner}</strong>.</p>
+            <p>Hello <strong>${assignee.name || "Team Member"}</strong>,</p>
+            <p>A task has been reassigned to you from <strong>${before.assignedToName || before.owner}</strong>.</p>
             
             <div style="background-color: #f9fafb; padding: 20px; border-radius: 12px; border: 1px solid #e5e7eb; margin: 20px 0;">
               <table style="width: 100%; border-collapse: collapse;">
@@ -176,7 +198,7 @@ export const onTaskUpdated = functions.firestore.onDocumentUpdated("tasks/{taskI
 
       if (SENDGRID_API_KEY) {
         await sgMail.send(msg);
-        console.log(`Reassignment email sent to ${email} for task ${taskId}`);
+        console.log(`Reassignment email sent to ${assignee.email} for task ${taskId}`);
       }
     } catch (error) {
       console.error("Error sending reassignment email:", error);
@@ -186,40 +208,37 @@ export const onTaskUpdated = functions.firestore.onDocumentUpdated("tasks/{taskI
 
 /**
  * 3. OVERDUE TASK REMINDER
- * Scheduled to run daily at 9:00 AM IST.
+ * Scheduled to run daily at 9:00 AM IST (3:30 AM UTC).
  */
-export const overdueReminderSchedule = functions.scheduler.onSchedule("0 9 * * *", async (event) => {
+export const overdueReminderSchedule = functions.scheduler.onSchedule("30 3 * * *", async (event) => {
   const now = admin.firestore.Timestamp.now();
   
   try {
     // Fetch incomplete tasks where nextActionDate has passed
-    const overdueTasks = await db.collection("tasks")
+    const overdueTasksSnap = await db.collection("tasks")
       .where("status", "!=", "Completed")
       .where("nextActionDate", "<", now)
       .get();
 
-    if (overdueTasks.empty) {
+    if (overdueTasksSnap.empty) {
       console.log("Health check: No overdue tasks found today.");
       return;
     }
 
-    // Group tasks by ownerId to send one email per user
-    const tasksByOwner: Record<string, any[]> = {};
-    overdueTasks.forEach(doc => {
-      const data = doc.data();
-      if (!tasksByOwner[data.ownerId]) {
-        tasksByOwner[data.ownerId] = [];
-      }
-      tasksByOwner[data.ownerId].push({ id: doc.id, ...data });
+    // Group tasks by assignee ID (assignedTo first, fallback to ownerId)
+    const tasksByAssignee: Record<string, any[]> = {};
+    overdueTasksSnap.forEach(docSnap => {
+      const data = docSnap.data();
+      const assigneeId = data.assignedTo || data.ownerId;
+      if (!assigneeId) return;
+      if (!tasksByAssignee[assigneeId]) tasksByAssignee[assigneeId] = [];
+      tasksByAssignee[assigneeId].push({ id: docSnap.id, ...data });
     });
 
-    // Process mail for each owner
-    for (const [ownerId, tasks] of Object.entries(tasksByOwner)) {
-      const userDoc = await db.collection("users").doc(ownerId).get();
-      if (!userDoc.exists) continue;
-      const user = userDoc.data();
-      const email = user?.email;
-      if (!email) continue;
+    // Process mail for each assignee
+    for (const [assigneeId, tasks] of Object.entries(tasksByAssignee)) {
+      const assignee = await resolveEmail(assigneeId);
+      if (!assignee?.email) continue;
 
       const taskListHtml = tasks.map(t => `
         <div style="margin-bottom: 15px; border-bottom: 1px solid #f3f4f6; padding-bottom: 10px;">
@@ -236,13 +255,13 @@ export const overdueReminderSchedule = functions.scheduler.onSchedule("0 9 * * *
       `).join("");
 
       const msg = {
-        to: email,
+        to: assignee.email,
         from: FROM_EMAIL,
         subject: `ACTION REQUIRED: ${tasks.length} Overdue Tasks on Your Board`,
         html: `
           <div style="font-family: sans-serif; padding: 20px; color: #333; line-height: 1.5;">
             <h2 style="color: #ef4444; border-bottom: 2px solid #fee2e2; padding-bottom: 10px;">Overdue Tasks Reminder</h2>
-            <p>Hello <strong>${user?.displayName || "Team Member"}</strong>,</p>
+            <p>Hello <strong>${assignee.name || "Team Member"}</strong>,</p>
             <p>You have <strong>${tasks.length}</strong> tasks that are currently past their due dates.</p>
             
             <div style="margin: 20px 0;">
@@ -260,7 +279,7 @@ export const overdueReminderSchedule = functions.scheduler.onSchedule("0 9 * * *
 
       if (SENDGRID_API_KEY) {
         await sgMail.send(msg);
-        console.log(`Overdue reminder email sent to ${email} for ${tasks.length} tasks`);
+        console.log(`Overdue reminder email sent to ${assignee.email} for ${tasks.length} tasks`);
       }
     }
   } catch (error) {
@@ -269,9 +288,104 @@ export const overdueReminderSchedule = functions.scheduler.onSchedule("0 9 * * *
 });
 
 /**
- * 4. DAILY AUTOMATED BACKUP LOG
+ * 4. UPCOMING TASK REMINDER (2 DAYS BEFORE DUE)
+ * Scheduled daily at 7:00 AM IST (1:30 AM UTC).
+ */
+export const upcomingTaskReminderSchedule = functions.scheduler.onSchedule("30 1 * * *", async (event) => {
+  const now = new Date();
+
+  // Tomorrow 00:00 local
+  const tomorrow = new Date(now);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  tomorrow.setHours(0, 0, 0, 0);
+
+  // Day after tomorrow 00:00 local
+  const dayAfterTomorrow = new Date(now);
+  dayAfterTomorrow.setDate(dayAfterTomorrow.getDate() + 2);
+  dayAfterTomorrow.setHours(0, 0, 0, 0);
+
+  const tomorrowTs = admin.firestore.Timestamp.fromDate(tomorrow);
+  const dayAfterTs = admin.firestore.Timestamp.fromDate(dayAfterTomorrow);
+
+  try {
+    // Tasks due in exactly 2 days that are still open
+    const upcomingSnap = await db.collection("tasks")
+      .where("status", "!=", "Completed")
+      .where("nextActionDate", ">=", tomorrowTs)
+      .where("nextActionDate", "<", dayAfterTs)
+      .get();
+
+    if (upcomingSnap.empty) {
+      console.log("Upcoming reminder: No tasks due in 2 days.");
+      return;
+    }
+
+    // Group by assignee
+    const tasksByAssignee: Record<string, any[]> = {};
+    upcomingSnap.forEach(docSnap => {
+      const data = docSnap.data();
+      const assigneeId = data.assignedTo || data.ownerId;
+      if (!assigneeId) return;
+      if (!tasksByAssignee[assigneeId]) tasksByAssignee[assigneeId] = [];
+      tasksByAssignee[assigneeId].push({ id: docSnap.id, ...data });
+    });
+
+    for (const [assigneeId, tasks] of Object.entries(tasksByAssignee)) {
+      const assignee = await resolveEmail(assigneeId);
+      if (!assignee?.email) continue;
+
+      const taskListHtml = tasks.map(t => `
+        <div style="margin-bottom: 15px; border-bottom: 1px solid #f3f4f6; padding-bottom: 10px;">
+          <p style="margin: 0; font-weight: bold; color: #1e40af;">${t.type}: ${t.nextAction}</p>
+          <p style="margin: 3px 0; font-size: 12px; color: #6b7280;">
+            Customer: ${t.customerName || "N/A"}
+          </p>
+          <p style="margin: 3px 0; font-size: 12px; color: #d97706; font-weight: bold;">
+            Due: ${t.nextActionDate.toDate().toLocaleDateString('en-IN')}
+          </p>
+        </div>
+      `).join("");
+
+      const msg = {
+        to: assignee.email,
+        from: FROM_EMAIL,
+        subject: `REMINDER: Task Due in 2 Days – Action Required`,
+        html: `
+          <div style="font-family: sans-serif; padding: 20px; color: #333; line-height: 1.5;">
+            <h2 style="color: #d97706; border-bottom: 2px solid #fef3c7; padding-bottom: 10px;">Upcoming Task Reminder</h2>
+            <p>Hello <strong>${assignee.name || "Team Member"}</strong>,</p>
+            <p>You have <strong>${tasks.length}</strong> task(s) due in <strong>2 days</strong>. Please plan accordingly.</p>
+            
+            <div style="margin: 20px 0;">
+              ${taskListHtml}
+            </div>
+            
+            <div style="text-align: center; margin-top: 30px;">
+              <a href="${APP_URL}/tasks" style="background-color: #d97706; color: white; padding: 12px 30px; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 16px; display: inline-block;">
+                View My Tasks
+              </a>
+            </div>
+
+            <p style="margin-top: 40px; font-size: 12px; color: #9ca3af; text-align: center; border-top: 1px solid #f3f4f6; padding-top: 20px;">
+              This is an automated reminder. Please do not reply to this email.
+            </p>
+          </div>
+        `,
+      };
+
+      if (SENDGRID_API_KEY) {
+        await sgMail.send(msg);
+        console.log(`Upcoming reminder sent to ${assignee.email} for ${tasks.length} tasks due in 2 days`);
+      }
+    }
+  } catch (error) {
+    console.error("Critical failure in upcoming task reminder schedule:", error);
+  }
+});
+
+/**
+ * 5. DAILY AUTOMATED BACKUP LOG
  * Scheduled to run daily at midnight.
- * Records record counts across all major collections for data integrity auditing.
  */
 export const dailyBackupSchedule = functions.scheduler.onSchedule("0 0 * * *", async (event) => {
   try {

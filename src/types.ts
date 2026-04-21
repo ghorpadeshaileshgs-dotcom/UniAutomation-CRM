@@ -276,6 +276,8 @@ export interface Complaint extends AuditFields {
   leadId?: string; // Link to lead
   projectId?: string; // SO Number
   productType: string;
+  partId?: string;
+  partNo?: string;
   complaintDate: Timestamp;
   complaintSource: ComplaintSource;
   complaintType: ComplaintType;
