@@ -81,6 +81,7 @@ import LeadDetail from './components/LeadDetail';
 import TechnicalTemplateList from './components/TechnicalTemplateList';
 import TechnicalTemplateForm from './components/TechnicalTemplateForm';
 import LeadFilters from './components/LeadFilters';
+import AdminSetup from './components/AdminSetup';
 
 export default function App() {
   const { 
@@ -201,6 +202,11 @@ export default function App() {
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
       </div>
     );
+  }
+
+  // One-time admin setup route — accessible via /#admin-setup
+  if (window.location.hash === '#admin-setup') {
+    return <AdminSetup />;
   }
 
   if (!user) {

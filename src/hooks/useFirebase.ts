@@ -6,6 +6,7 @@ import {
   orderBy, 
   doc, 
   getDoc,
+  setDoc,
   where,
   getDocFromServer,
   limit
@@ -138,18 +139,23 @@ export function useFirebase() {
             setUser(u);
           } else {
             // Check if this is the designated admin email
-            if (u.email === 'ghorpadeshaileshgs@gmail.com') {
-              console.log("Admin email detected, allowing session even without profile (auto-create pending)");
-              setProfile({
+            if (u.email === 'ghorpadeshaileshgs@gmail.com' || u.email === 'admin@uapl.com') {
+              console.log("Admin email detected — auto-creating Firestore profile.");
+              const adminProfile: UserProfile = {
                 uid: u.uid,
                 email: u.email,
                 displayName: u.displayName || 'Admin User',
                 role: 'Admin',
                 isActive: true
-              });
+              };
+              // Persist to Firestore so it survives page refreshes
+              try {
+                await setDoc(doc(db, 'users', u.uid), adminProfile, { merge: true });
+              } catch (writeErr) {
+                console.warn('Could not persist admin profile to Firestore:', writeErr);
+              }
+              setProfile(adminProfile);
               setUser(u);
-              // Trigger server-side creation
-              fetch('/api/admin/promote-shailesh').catch(console.error);
             } else {
               // IF user does NOT exist: logout user and show message
               toast.error("Unauthorized user. Contact administrator.");
