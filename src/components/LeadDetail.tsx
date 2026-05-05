@@ -91,7 +91,7 @@ export default function LeadDetail({
   const leadTasks = useMemo(() => tasks.filter(t => t.leadId === lead.id), [tasks, lead.id]);
   const leadReviews = useMemo(() => designReviews.filter(r => r.leadId === lead.id), [designReviews, lead.id]);
   const leadQuotes = useMemo(() => quotes.filter(q => q.leadId === lead.id), [quotes, lead.id]);
-  const leadComplaints = useMemo(() => complaints.filter(c => c.leadId === lead.id), [complaints, lead.id]);
+  const leadComplaints = useMemo(() => complaints.filter(c => c.customerId === lead.customerId), [complaints, lead.customerId]);
   const leadFeasibilityForm = useMemo(() => feasibilityForms.find(f => f.leadId === lead.id), [feasibilityForms, lead.id]);
 
   const isDesign = userProfile?.role === 'Design';

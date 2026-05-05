@@ -26,6 +26,27 @@ export const orderService = {
       updatedBy: userDisplayName
     });
 
+    // Auto-task: Send Order Acknowledgement
+    await addDoc(collection(db, 'tasks'), {
+      relatedTo: 'Customer',
+      customerId: (order as any).customerId || '',
+      customerName: (order as any).customerName || '',
+      date: now,
+      type: 'Internal Coordination',
+      priority: 'High',
+      summary: `Order acknowledgement for SO: ${(order as any).soNumber || docRef.id}`,
+      nextAction: `Send order acknowledgement to ${(order as any).customerName || 'customer'}`,
+      nextActionDate: Timestamp.fromDate(new Date(Date.now() + 1 * 24 * 60 * 60 * 1000)),
+      owner: userDisplayName,
+      ownerId: userId,
+      assignedTo: userId,
+      assignedToName: userDisplayName,
+      status: 'Authorized',
+      createdAt: now,
+      createdById: userId,
+      createdBy: userDisplayName,
+    });
+
     return docRef;
   },
 

@@ -45,6 +45,7 @@ import AdminDashboard from './AdminDashboard';
 import TargetManagement from './TargetManagement';
 import AdminSettings from './AdminSettings';
 import MastersManagement from './MastersManagement';
+import SampleDataSeeder from './SampleDataSeeder';
 
 interface AdminPanelProps {
   users: UserProfile[];
@@ -308,7 +309,8 @@ export default function AdminPanel({
           <MastersManagement customers={customers} parts={parts} />
         </TabsContent>
 
-        <TabsContent value="data">
+        <TabsContent value="data" className="space-y-6">
+          <SampleDataSeeder />
           <DataManagement />
         </TabsContent>
 

@@ -208,6 +208,12 @@ export interface Task extends AuditFields {
   status: TaskStatus;
   authorizedBy?: string;
   authorizedAt?: Timestamp;
+  activityLog?: {
+    date: Timestamp;
+    author: string;
+    authorId: string;
+    message: string;
+  }[];
 }
 
 export type UserRole = 'Admin' | 'Sales' | 'BDM' | 'Sales Support' | 'Design' | 'Quality' | 'Accounts';
@@ -263,35 +269,98 @@ export interface Debtor extends AuditFields {
   nextFollowUp?: Timestamp;
 }
 
-export type ComplaintSource = 'Email' | 'Call' | 'Visit';
-export type ComplaintType = 'Quality' | 'Functional Failure' | 'Fitment' | 'Delivery' | 'Documentation';
+export type ComplaintSource = 'Email' | 'Call' | 'Visit' | 'Portal';
+export type ComplaintType = 'Quality' | 'Functional Failure' | 'Fitment' | 'Delivery' | 'Documentation' | 'Cosmetic';
 export type ComplaintSeverity = 'Critical' | 'Major' | 'Minor';
-export type ComplaintStatus = 'Open' | 'Under Investigation' | 'Action Implemented' | 'Closed';
+export type ComplaintStatus = 'Open' | 'Acknowledged' | 'Containment Done' | 'Under Investigation' | 'CAPA Submitted' | 'Verification Pending' | 'Closed' | 'Re-Opened';
+export type RCAMethod = '5-Why' | 'Fishbone' | 'FMEA' | 'Fault Tree' | 'Other';
+export type EffectivenessResult = 'Effective' | 'Not Effective' | 'Pending';
+
+export interface ComplaintHistoryEntry {
+  date: Timestamp;
+  status: ComplaintStatus;
+  updatedBy: string;
+  updatedById: string;
+  remarks: string;
+}
 
 export interface Complaint extends AuditFields {
   id: string;
-  complaintId: string;
+  complaintId: string;               // Auto: CMP-YYYYMM-NNN
+
+  // Section 1: Receipt
   customerName: string;
   customerId?: string;
-  leadId?: string; // Link to lead
-  projectId?: string; // SO Number
-  productType: string;
-  partId?: string;
-  partNo?: string;
+  contactPerson?: string;
   complaintDate: Timestamp;
   complaintSource: ComplaintSource;
   complaintType: ComplaintType;
   severity: ComplaintSeverity;
+  partId?: string;
+  partNo?: string;
+  productType: string;
+  projectId?: string;
+  batchNumber?: string;
+  serialNumber?: string;
+  quantityAffected?: number;
   description: string;
+
+  // Section 2: Acknowledgement (AS9100 8.2.1)
+  acknowledgedDate?: Timestamp;
+  acknowledgedBy?: string;
+  acknowledgementSentToCustomer?: boolean;
+
+  // Section 3: Containment (AS9100 8.5.5 / D3)
+  containmentAction?: string;
+  containmentDate?: Timestamp;
+  containmentOwner?: string;
+  containmentOwnerId?: string;
+  sampleReturnRequired?: boolean;
+  sampleReturnStatus?: 'Pending' | 'Received' | 'Not Required';
+  containmentStatus?: 'Pending' | 'Done';
+
+  // Section 4: Root Cause Analysis (AS9100 10.2.1c)
   assignedTo: string;
   assignedToId?: string;
-  status: ComplaintStatus;
+  rcaMethod?: RCAMethod;
   rootCause?: string;
+  rcaTeamMembers?: string;
+  rcaCompletedDate?: Timestamp;
+  contributingFactors?: string;
+  escapePoint?: string;
+
+  // Section 5: CAPA (AS9100 10.2.1d-e)
   correctiveAction?: string;
+  correctiveActionOwner?: string;
+  correctiveActionTargetDate?: Timestamp;
+  correctiveActionDoneDate?: Timestamp;
   preventiveAction?: string;
+  preventiveActionOwner?: string;
+  processDocumentUpdated?: string;
+  similarComplaintsChecked?: boolean;
+
+  // Section 6: Effectiveness Verification (AS9100 10.2.1f)
+  verificationDueDate?: Timestamp;
+  verificationDate?: Timestamp;
+  verificationMethod?: string;
+  verifiedBy?: string;
+  verifiedById?: string;
+  effectivenessResult?: EffectivenessResult;
+
+  // Section 7: Closure & Customer Communication (8.2.1)
   responseDate?: Timestamp;
   closureDate?: Timestamp;
-  turnaroundTime?: number; // in days
+  customerNotifiedDate?: Timestamp;
+  customerAccepted?: boolean;
+  turnaroundTime?: number;
+  status: ComplaintStatus;
+
+  // Audit trail
+  history?: ComplaintHistoryEntry[];
+
+  // Reports linkage
+  isRepeatComplaint?: boolean;
+  linkedComplaintId?: string;
 }
 
 export interface TechnicalParameter {

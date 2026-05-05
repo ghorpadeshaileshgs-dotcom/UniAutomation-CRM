@@ -418,3 +418,151 @@ export const dailyBackupSchedule = functions.scheduler.onSchedule("0 0 * * *", a
     console.error("Backup schedule failed:", error);
   }
 });
+
+/**
+ * 6. COMPLAINT SLA BREACH NOTIFICATIONS
+ * Runs daily at 8:00 AM IST (2:30 AM UTC).
+ * Checks Acknowledgement, Containment, RCA, and Closure SLAs.
+ */
+export const complaintSLABreach = functions.scheduler.onSchedule("30 2 * * *", async (event) => {
+  const now = new Date();
+  const nowMs = now.getTime();
+
+  // SLA definitions (in milliseconds)
+  const SLA: Record<string, Record<string, number>> = {
+    acknowledgement: { Critical: 4 * 60 * 60 * 1000, Major: 24 * 60 * 60 * 1000, Minor: 48 * 60 * 60 * 1000 },
+    containment:     { Critical: 1 * 86400000, Major: 2 * 86400000, Minor: 5 * 86400000 },
+    rca:             { Critical: 3 * 86400000, Major: 7 * 86400000, Minor: 14 * 86400000 },
+    closure:         { Critical: 10 * 86400000, Major: 21 * 86400000, Minor: 30 * 86400000 },
+  };
+
+  try {
+    const snap = await db.collection("complaints").where("status", "!=", "Closed").get();
+    if (snap.empty) {
+      console.log("complaintSLABreach: No open complaints.");
+      return;
+    }
+
+    const sendBreachEmail = async (toId: string, subject: string, bodyHtml: string) => {
+      const recipient = await resolveEmail(toId);
+      if (!recipient?.email) return;
+      if (!SENDGRID_API_KEY) { console.warn("SendGrid not configured, email skipped."); return; }
+      await sgMail.send({ to: recipient.email, from: FROM_EMAIL, subject, html: bodyHtml });
+      console.log(`SLA breach email sent to ${recipient.email}: ${subject}`);
+    };
+
+    const emailBody = (title: string, rows: string) => `
+      <div style="font-family:sans-serif;padding:20px;color:#333;line-height:1.5;">
+        <h2 style="color:#dc2626;border-bottom:2px solid #fee2e2;padding-bottom:8px;">${title}</h2>
+        <table style="width:100%;border-collapse:collapse;margin-top:12px;">
+          <tr style="background:#f9fafb;">
+            <th style="padding:6px 10px;border:1px solid #e5e7eb;text-align:left;">Field</th>
+            <th style="padding:6px 10px;border:1px solid #e5e7eb;text-align:left;">Value</th>
+          </tr>${rows}
+        </table>
+        <p style="margin-top:20px;font-size:11px;color:#9ca3af;">This is an automated SLA breach alert from SensorCRM Pro.</p>
+      </div>`;
+
+    const row = (label: string, val: string) =>
+      `<tr><td style="padding:5px 10px;border:1px solid #e5e7eb;">${label}</td><td style="padding:5px 10px;border:1px solid #e5e7eb;font-weight:bold;">${val}</td></tr>`;
+
+    for (const docSnap of snap.docs) {
+      const c = docSnap.data();
+      const sev: string = c.severity || "Minor";
+      const complaintMs = c.complaintDate?.toDate?.()?.getTime?.() ?? nowMs;
+      const age = nowMs - complaintMs;
+      const cid = c.complaintId || docSnap.id;
+
+      const subjectPrefix = `SLA BREACH [${sev}] Complaint ${cid}`;
+
+      // (a) Acknowledgement SLA
+      if (!c.acknowledgedDate && age > SLA.acknowledgement[sev]) {
+        const assigneeId = c.assignedToId || c.createdById;
+        if (assigneeId) {
+          await sendBreachEmail(
+            assigneeId,
+            `${subjectPrefix} — Acknowledgement overdue`,
+            emailBody(
+              `⚠️ Acknowledgement SLA Breach — ${cid}`,
+              row("Complaint ID", cid) +
+              row("Customer", c.customerName || "N/A") +
+              row("Severity", sev) +
+              row("Stage", "Acknowledgement") +
+              row("Age (hrs)", String(Math.round(age / 3600000)))
+            )
+          );
+        }
+      }
+
+      // (b) Containment SLA
+      if (c.containmentStatus !== "Done" && age > SLA.containment[sev]) {
+        const ownerId = c.containmentOwnerId || c.assignedToId;
+        if (ownerId) {
+          await sendBreachEmail(
+            ownerId,
+            `${subjectPrefix} — Containment overdue`,
+            emailBody(
+              `⚠️ Containment SLA Breach — ${cid}`,
+              row("Complaint ID", cid) +
+              row("Customer", c.customerName || "N/A") +
+              row("Severity", sev) +
+              row("Stage", "Containment") +
+              row("Age (days)", String(Math.round(age / 86400000)))
+            )
+          );
+        }
+      }
+
+      // (c) RCA SLA
+      if (!c.rcaCompletedDate && age > SLA.rca[sev]) {
+        const assigneeId = c.assignedToId;
+        if (assigneeId) {
+          await sendBreachEmail(
+            assigneeId,
+            `${subjectPrefix} — RCA overdue`,
+            emailBody(
+              `⚠️ RCA SLA Breach — ${cid}`,
+              row("Complaint ID", cid) +
+              row("Customer", c.customerName || "N/A") +
+              row("Severity", sev) +
+              row("Stage", "Root Cause Analysis") +
+              row("Age (days)", String(Math.round(age / 86400000)))
+            )
+          );
+        }
+      }
+
+      // (d) Closure SLA — escalate to assignee AND their reporting manager
+      if (age > SLA.closure[sev]) {
+        const assigneeId = c.assignedToId;
+        if (assigneeId) {
+          const closureBody = emailBody(
+            `🚨 Closure SLA Escalation — ${cid}`,
+            row("Complaint ID", cid) +
+            row("Customer", c.customerName || "N/A") +
+            row("Severity", sev) +
+            row("Stage", "Closure") +
+            row("Age (days)", String(Math.round(age / 86400000))) +
+            row("SLA Target (days)", String(SLA.closure[sev] / 86400000))
+          );
+          await sendBreachEmail(assigneeId, `${subjectPrefix} — Closure SLA escalation`, closureBody);
+
+          // Look up reporting manager
+          try {
+            const userDoc = await db.collection("users").doc(assigneeId).get();
+            const managerId = userDoc.data()?.reportingManager;
+            if (managerId) {
+              await sendBreachEmail(managerId, `[ESCALATION] ${subjectPrefix} — Closure SLA breach`, closureBody);
+            }
+          } catch (e) {
+            console.warn("Could not fetch reporting manager for", assigneeId);
+          }
+        }
+      }
+    }
+
+    console.log(`complaintSLABreach: Processed ${snap.size} open complaints.`);
+  } catch (error) {
+    console.error("complaintSLABreach failed:", error);
+  }
+});

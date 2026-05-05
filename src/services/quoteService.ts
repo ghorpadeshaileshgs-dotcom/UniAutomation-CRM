@@ -29,10 +29,30 @@ export const quoteService = {
 
     // Update lead if attached via leadService to trigger automations
     if (quote.leadId) {
-      await leadService.updateLead(quote.leadId, {
-        quoteCreated: true
-      }, currentUser);
+      await leadService.updateLead(quote.leadId, { quoteCreated: true }, currentUser);
     }
+
+    // Auto-task: Follow-up on quote
+    await addDoc(collection(db, 'tasks'), {
+      relatedTo: 'Lead',
+      leadId: quote.leadId || '',
+      customerId: quote.customerId || '',
+      customerName: quote.customerName || '',
+      date: now,
+      type: 'Customer Query',
+      priority: 'Medium',
+      summary: `Follow up on quotation ${docRef.id} sent to ${quote.customerName}`,
+      nextAction: `Follow up with ${quote.customerName} on submitted quotation`,
+      nextActionDate: Timestamp.fromDate(new Date(Date.now() + 5 * 24 * 60 * 60 * 1000)),
+      owner: userDisplayName,
+      ownerId: userId,
+      assignedTo: userId,
+      assignedToName: userDisplayName,
+      status: 'Authorized',
+      createdAt: now,
+      createdById: userId,
+      createdBy: userDisplayName,
+    });
 
     return docRef;
   },

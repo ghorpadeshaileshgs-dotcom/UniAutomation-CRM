@@ -4,6 +4,7 @@ import { Employee, Department } from '../types';
 import { Button } from '@/components/ui/button';
 import { EmployeeForm } from './EmployeeForm';
 import { BulkEmployeeUpload } from './BulkEmployeeUpload';
+import { toast } from 'sonner';
 
 interface EmployeeListProps {
   employees: Employee[];
@@ -176,12 +177,19 @@ export const EmployeeList: React.FC<EmployeeListProps> = ({
           departments={departments}
           onClose={() => setIsFormOpen(false)}
           onSubmit={async (data) => {
-            if (editingEmployee) {
-              await onUpdate(editingEmployee.id, data);
-            } else {
-              await onAdd(data);
+            try {
+              if (editingEmployee) {
+                await onUpdate(editingEmployee.id, data);
+                toast.success('Employee updated successfully');
+              } else {
+                await onAdd(data);
+                toast.success('Employee added successfully');
+              }
+              setIsFormOpen(false);
+              setEditingEmployee(null);
+            } catch (err: any) {
+              toast.error('Failed to save employee: ' + err.message);
             }
-            setIsFormOpen(false);
           }}
         />
       )}

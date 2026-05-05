@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X } from 'lucide-react';
 import { Employee, Department } from '../types';
 import { Button } from '@/components/ui/button';
@@ -28,6 +28,21 @@ export const EmployeeForm: React.FC<EmployeeFormProps> = ({
     status: employee?.status || 'Active'
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Reset form whenever the employee prop changes (fixes blank form on second open)
+  useEffect(() => {
+    setFormData({
+      employeeId: employee?.employeeId || '',
+      name: employee?.name || '',
+      email: employee?.email || '',
+      phone: employee?.phone || '',
+      departmentId: employee?.departmentId || '',
+      departmentName: employee?.departmentName || '',
+      designation: employee?.designation || '',
+      role: employee?.role || 'Sales',
+      status: employee?.status || 'Active'
+    });
+  }, [employee]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

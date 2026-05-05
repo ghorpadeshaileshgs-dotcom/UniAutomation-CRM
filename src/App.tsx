@@ -566,7 +566,7 @@ export default function App() {
                 </TabsContent>
               </Tabs>
             )}
-            {activeTab === 'tasks' && <TaskBoard leads={filteredLeads} />}
+            {activeTab === 'tasks' && <TaskBoard leads={filteredLeads} onNavigate={(tab) => setActiveTab(tab)} />}
             {activeTab === 'debtors' && <DebtorsList debtors={debtors} />}
             {activeTab === 'reports' && <Reports leads={leads} tasks={tasks} debtors={debtors} designReviews={designReviews} team={team} />}
             {activeTab === 'design' && (
@@ -690,17 +690,14 @@ export default function App() {
         )}
 
         {showComplaintForm && (
-          <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4">
-            <div className="w-full max-w-4xl max-h-[90vh] overflow-auto">
-              <ComplaintForm 
-                customers={customers}
-                employees={employees}
-                parts={parts}
-                onSubmit={addComplaint}
-                onCancel={() => setShowComplaintForm(false)}
-              />
-            </div>
-          </div>
+          <ComplaintForm
+            customers={customers}
+            employees={employees}
+            parts={parts}
+            onSubmit={addComplaint}
+            onCancel={() => { setShowComplaintForm(false); setSelectedComplaint(null); }}
+            initialData={selectedComplaint || undefined}
+          />
         )}
 
         {isReviewingFeasibility && selectedFeasibilityForm && (
