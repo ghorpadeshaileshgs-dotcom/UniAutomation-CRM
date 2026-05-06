@@ -427,18 +427,57 @@ export interface SalesOrder extends AuditFields {
   deliveryDate?: Timestamp;
 }
 
+export interface PaymentEntry {
+  date: Timestamp;
+  amount: number;
+  mode: 'NEFT' | 'RTGS' | 'Cheque' | 'Cash' | 'UPI';
+  reference: string;
+  recordedBy: string;
+  recordedById: string;
+}
+
+export interface InvoiceLineItem {
+  description: string;
+  partNo?: string;
+  qty: number;
+  unitPrice: number;
+  amount: number; // qty * unitPrice
+}
+
+export type InvoiceSegment = 'AD' | 'E' | 'D';
+export type PaymentStatus = 'Open' | 'Partially Paid' | 'Paid' | 'Overdue';
+
 export interface Invoice extends AuditFields {
   id: string;
-  soId: string;
-  invoiceNumber: string;
+  invoiceNumber: string;        // e.g. 26AD1, 26D3
+  segment: InvoiceSegment;      // AD | E | D
   invoiceDate: Timestamp;
-  amount: number;
-  paymentReceived: number;
-  balance: number;
-  dueDate: Timestamp;
-  status: 'Pending' | 'Paid' | 'Overdue';
+  customerId: string;
   customerName: string;
-  salespersonId: string;
+  soId?: string;
+  soNumber?: string;
+  lineItems: InvoiceLineItem[];
+  subtotal: number;
+  gstPercent: number;           // 5 | 12 | 18 | 28
+  gstAmount: number;
+  amount: number;               // grand total (subtotal + gstAmount)
+  paymentTermsDays: number;     // 0=Immediate | 30 | 45 | 60 | 90
+  dueDate: Timestamp;
+  paymentStatus: PaymentStatus;
+  amountReceived: number;
+  balanceDue: number;
+  remarks?: string;
+  salespersonId?: string;
+  paymentHistory?: PaymentEntry[];
+  // Reminder flags (set by Cloud Function)
+  reminder7DaySent?: boolean;
+  reminderDueDaySent?: boolean;
+  reminder7DaysOverdueSent?: boolean;
+  reminder30DaysOverdueSent?: boolean;
+  // Legacy compat fields
+  paymentReceived?: number;
+  balance?: number;
+  status?: string;
 }
 
 export interface MonthlyTarget extends AuditFields {

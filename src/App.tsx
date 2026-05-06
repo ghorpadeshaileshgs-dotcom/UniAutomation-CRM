@@ -386,7 +386,7 @@ export default function App() {
 
             {activeTab === 'dashboard' && <CEODashboard leads={leads} tasks={tasks} quotes={quotes} salesOrders={salesOrders} invoices={invoices} targets={targets} forecasts={forecasts} approvals={approvals} debtors={debtors} />}
             {activeTab === 'orders' && <OrderManagement orders={salesOrders} customers={customers} onAdd={() => {}} onEdit={() => {}} />}
-            {activeTab === 'finance' && <FinanceManagement invoices={invoices} targets={targets} forecasts={forecasts} debtors={debtors} onAddInvoice={() => {}} onUpdateTarget={setTarget} onUpdateForecast={saveForecast} />}
+            {activeTab === 'finance' && <FinanceManagement invoices={invoices} targets={targets} forecasts={forecasts} customers={customers} onUpdateTarget={setTarget} onUpdateForecast={saveForecast} />}
             {activeTab === 'governance' && (
               <GovernanceManagement 
                 approvals={approvals} 
@@ -567,7 +567,7 @@ export default function App() {
               </Tabs>
             )}
             {activeTab === 'tasks' && <TaskBoard leads={filteredLeads} onNavigate={(tab) => setActiveTab(tab)} />}
-            {activeTab === 'debtors' && <DebtorsList debtors={debtors} />}
+            {activeTab === 'debtors' && <FinanceManagement invoices={invoices} targets={targets} forecasts={forecasts} customers={customers} onUpdateTarget={setTarget} onUpdateForecast={saveForecast} />}
             {activeTab === 'reports' && <Reports leads={leads} tasks={tasks} debtors={debtors} designReviews={designReviews} team={team} />}
             {activeTab === 'design' && (
               <div className="space-y-6">

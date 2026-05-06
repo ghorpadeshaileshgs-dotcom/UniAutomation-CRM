@@ -566,3 +566,153 @@ export const complaintSLABreach = functions.scheduler.onSchedule("30 2 * * *", a
     console.error("complaintSLABreach failed:", error);
   }
 });
+
+/**
+ * PAYMENT REMINDER EMAILS
+ * Runs daily at 9 AM IST (3:30 AM UTC).
+ * Sends 4 staged reminders per unpaid invoice.
+ */
+export const paymentReminderSchedule = functions.scheduler.onSchedule(
+  { schedule: "30 3 * * *", timeZone: "Asia/Kolkata" },
+  async () => {
+    if (!SENDGRID_API_KEY) {
+      console.warn("paymentReminderSchedule: SENDGRID_API_KEY not set, skipping.");
+      return;
+    }
+
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+    const dayMs = 24 * 60 * 60 * 1000;
+    const addDays = (d: Date, n: number) => new Date(d.getTime() + n * dayMs);
+    const sameDay = (a: Date, b: Date) =>
+      a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+
+    const snap = await db.collection("invoices")
+      .where("paymentStatus", "!=", "Paid")
+      .get();
+
+    console.log(`paymentReminderSchedule: Processing ${snap.size} unpaid invoices.`);
+
+    for (const invDoc of snap.docs) {
+      const inv = invDoc.data();
+      const invRef = invDoc.ref;
+
+      if (!inv.dueDate || !inv.customerId) continue;
+      const dueDate = inv.dueDate.toDate ? inv.dueDate.toDate() : new Date(inv.dueDate);
+      const dueDay = new Date(dueDate.getFullYear(), dueDate.getMonth(), dueDate.getDate());
+
+      // Fetch customer email
+      const custDoc = await db.collection("customers").doc(inv.customerId).get();
+      if (!custDoc.exists) {
+        console.warn(`paymentReminderSchedule: Customer ${inv.customerId} not found for invoice ${invDoc.id}`);
+        continue;
+      }
+      const cust = custDoc.data()!;
+      const toEmail = cust.email || cust.contactEmail || cust.contactPersons?.[0]?.email;
+      if (!toEmail) {
+        console.warn(`paymentReminderSchedule: No email for customer ${cust.name}, skipping.`);
+        continue;
+      }
+
+      const invoiceNumber = inv.invoiceNumber || invDoc.id;
+      const invoiceDateStr = inv.invoiceDate?.toDate ? inv.invoiceDate.toDate().toLocaleDateString("en-IN") : "";
+      const dueDateStr = dueDate.toLocaleDateString("en-IN");
+      const totalAmount = `₹${(inv.amount || 0).toLocaleString("en-IN")}`;
+      const balanceDue = `₹${(inv.balanceDue || inv.amount || 0).toLocaleString("en-IN")}`;
+
+      const baseBody = `
+Invoice Details:
+- Invoice No: ${invoiceNumber}
+- Invoice Date: ${invoiceDateStr}
+- Amount: ${totalAmount}
+- Balance Due: ${balanceDue}
+- Due Date: ${dueDateStr}
+
+For any queries, please contact us at accounts@uapl.in
+
+Thank you for your business.
+
+Regards,
+Accounts Team
+Uni Automation (I) Pvt. Ltd`;
+
+      const updates: Record<string, boolean> = {};
+
+      // REMINDER 1 — Due in 7 days
+      if (sameDay(today, addDays(dueDay, -7)) && !inv.reminder7DaySent) {
+        try {
+          await sgMail.send({
+            to: toEmail,
+            from: FROM_EMAIL,
+            subject: `Payment Due in 7 Days — Invoice ${invoiceNumber} | Uni Automation`,
+            text: `Dear ${cust.name},\n\nThis is a gentle reminder that Invoice ${invoiceNumber} for ${totalAmount} is due for payment on ${dueDateStr} (7 days from today). Please arrange payment at your earliest convenience.\n${baseBody}`,
+          });
+          updates.reminder7DaySent = true;
+          console.log(`Sent 7-day reminder for ${invoiceNumber} to ${toEmail}`);
+        } catch (e) { console.error(`Failed 7-day reminder for ${invoiceNumber}:`, e); }
+      }
+
+      // REMINDER 2 — Due today
+      if (sameDay(today, dueDay) && !inv.reminderDueDaySent) {
+        try {
+          await sgMail.send({
+            to: toEmail,
+            from: FROM_EMAIL,
+            subject: `Payment Due Today — Invoice ${invoiceNumber} | Uni Automation`,
+            text: `Dear ${cust.name},\n\nThis is a reminder that Invoice ${invoiceNumber} for ${totalAmount} is due for payment today (${dueDateStr}). Please arrange payment immediately.\n${baseBody}`,
+          });
+          updates.reminderDueDaySent = true;
+          console.log(`Sent due-day reminder for ${invoiceNumber} to ${toEmail}`);
+        } catch (e) { console.error(`Failed due-day reminder for ${invoiceNumber}:`, e); }
+      }
+
+      // REMINDER 3 — 7 days overdue
+      if (sameDay(today, addDays(dueDay, 7)) && !inv.reminder7DaysOverdueSent) {
+        try {
+          await sgMail.send({
+            to: toEmail,
+            from: FROM_EMAIL,
+            subject: `OVERDUE: Invoice ${invoiceNumber} — 7 Days Past Due | Uni Automation`,
+            text: `Dear ${cust.name},\n\nInvoice ${invoiceNumber} for ${totalAmount} (due ${dueDateStr}) is now 7 days overdue. Balance due: ${balanceDue}. Please arrange immediate payment to avoid further delays.\n${baseBody}`,
+          });
+          updates.reminder7DaysOverdueSent = true;
+          console.log(`Sent 7-day overdue reminder for ${invoiceNumber} to ${toEmail}`);
+        } catch (e) { console.error(`Failed 7-day overdue reminder for ${invoiceNumber}:`, e); }
+      }
+
+      // REMINDER 4 — 30 days overdue (escalation, CC salesperson)
+      const diffDays = Math.floor((today.getTime() - dueDay.getTime()) / dayMs);
+      if (diffDays >= 30 && !inv.reminder30DaysOverdueSent) {
+        const ccList: string[] = [];
+        if (inv.salespersonId) {
+          try {
+            const empDoc = await db.collection("employees").doc(inv.salespersonId).get();
+            if (empDoc.exists && empDoc.data()?.email) {
+              ccList.push(empDoc.data()!.email);
+            }
+          } catch (e) { console.warn("Could not resolve salesperson email", e); }
+        }
+        try {
+          await sgMail.send({
+            to: toEmail,
+            from: FROM_EMAIL,
+            cc: ccList.length ? ccList : undefined,
+            subject: `URGENT: Invoice ${invoiceNumber} — 30 Days Overdue | Uni Automation`,
+            text: `Dear ${cust.name},\n\nInvoice ${invoiceNumber} for ${totalAmount} (due ${dueDateStr}) is now ${diffDays} days overdue. Balance due: ${balanceDue}.\n\nThis requires your immediate attention. Continued non-payment may result in account restrictions.\n\nPlease contact us urgently at accounts@uapl.in to resolve this matter.\n${baseBody}`,
+          });
+          updates.reminder30DaysOverdueSent = true;
+          console.log(`Sent 30-day overdue escalation for ${invoiceNumber} to ${toEmail}`);
+        } catch (e) { console.error(`Failed 30-day escalation for ${invoiceNumber}:`, e); }
+      }
+
+      // Write flags back
+      if (Object.keys(updates).length > 0) {
+        await invRef.update(updates);
+      }
+    }
+
+    console.log("paymentReminderSchedule: Complete.");
+  }
+);
+

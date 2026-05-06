@@ -1,143 +1,45 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Default Deny
-    match /{document=**} {
-      allow read, write: if false;
-    }
 
-    // Helper Functions
     function isSignedIn() {
       return request.auth != null;
     }
 
-    function isEmailVerified() {
-      return isSignedIn() && request.auth.token.email_verified == true;
-    }
-
-    function isAdmin() {
-      return isSignedIn() &&
-        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'Admin';
-    }
-
-    function isSales() {
-      return isSignedIn() &&
-        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'Sales' ||
-         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'BDM' ||
-         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'Sales Support' ||
-         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'Admin');
-    }
-
-    function isDesign() {
-      return isSignedIn() &&
-        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'Design' ||
-         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'Admin');
-    }
-
-    function isAccounts() {
-      return isSignedIn() &&
-        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'Accounts' ||
-         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'Admin');
-    }
-
-    function isValidId(id) {
-      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
-    }
-
-    // Collection: Users
+    // Users: can read if signed in; can only write own document
     match /users/{userId} {
       allow read: if isSignedIn();
-      // Only Admin can create users (via API, but we allow sync here if needed)
-      allow write: if isAdmin();
-      // Users can update their own non-role fields
-      allow update: if isSignedIn() && request.auth.uid == userId
-                    && request.resource.data.role == resource.data.role;
+      allow write: if isSignedIn() && request.auth.uid == userId;
     }
 
-    // Collection: Leads
-    match /leads/{leadId} {
-      allow read: if isSignedIn();
-      allow create: if isSales();
-      allow update: if isSales() || isDesign();
-      allow delete: if isAdmin();
-    }
+    // All operational collections — signed-in user only
+    match /leads/{id}               { allow read, write: if isSignedIn(); }
+    match /customers/{id}           { allow read, write: if isSignedIn(); }
+    match /parts/{id}               { allow read, write: if isSignedIn(); }
+    match /quotes/{id}              { allow read, write: if isSignedIn(); }
+    match /tasks/{id}               { allow read, write: if isSignedIn(); }
+    match /complaints/{id}          { allow read, write: if isSignedIn(); }
+    match /sales_orders/{id}        { allow read, write: if isSignedIn(); }
+    match /salesOrders/{id}         { allow read, write: if isSignedIn(); }
+    match /invoices/{id}            { allow read, write: if isSignedIn(); }
+    match /employees/{id}           { allow read, write: if isSignedIn(); }
+    match /departments/{id}         { allow read, write: if isSignedIn(); }
+    match /debtors/{id}             { allow read, write: if isSignedIn(); }
+    match /targets/{id}             { allow read, write: if isSignedIn(); }
+    match /forecasts/{id}           { allow read, write: if isSignedIn(); }
+    match /approvals/{id}           { allow read, write: if isSignedIn(); }
+    match /approvalRequests/{id}    { allow read, write: if isSignedIn(); }
+    match /design_reviews/{id}      { allow read, write: if isSignedIn(); }
+    match /feasibility_forms/{id}   { allow read, write: if isSignedIn(); }
+    match /technical_templates/{id} { allow read, write: if isSignedIn(); }
+    match /backups/{id}             { allow read, write: if isSignedIn(); }
+    match /monthlyTargets/{id}      { allow read, write: if isSignedIn(); }
+    match /industries/{id}          { allow read, write: if isSignedIn(); }
+    match /customer_types/{id}      { allow read, write: if isSignedIn(); }
 
-    // Collection: Tasks
-    match /tasks/{taskId} {
-      allow read: if isSignedIn();
-      allow write: if isSignedIn();
-    }
-
-    // Collection: Customers
-    match /customers/{customerId} {
-      allow read: if isSignedIn();
-      allow create, update: if isSales();
-      allow delete: if isAdmin();
-    }
-
-    // Collection: Parts — open to all signed-in users
-    match /parts/{partId} {
+    // Safety net — any new collection added later works immediately
+    match /{document=**} {
       allow read, write: if isSignedIn();
     }
-
-    // Collection: Quotations
-    match /quotes/{quoteId} {
-      allow read: if isSignedIn();
-      allow create, update: if isSales();
-      allow delete: if isAdmin();
-    }
-
-    // Collection: Feasibility Forms
-    match /feasibility_forms/{formId} {
-      allow read: if isSignedIn();
-      allow write: if isDesign() || isSales();
-    }
-
-    // Collection: Sales Orders
-    match /sales_orders/{orderId} {
-      allow read: if isSignedIn();
-      allow create, update: if isSales() || isAccounts();
-      allow delete: if isAdmin();
-    }
-
-    // Collection: Invoices
-    match /invoices/{invoiceId} {
-      allow read: if isSignedIn();
-      allow write: if isAccounts();
-    }
-
-    // Collection: Targets
-    match /targets/{targetId} {
-      allow read: if isSignedIn();
-      allow write: if isAdmin();
-    }
-
-    // Collection: System Settings
-    match /system/settings {
-      allow read: if isSignedIn();
-      allow write: if isAdmin();
-    }
-
-    // Collection: Backups
-    match /backups/{backupId} {
-      allow read, write: if isAdmin();
-    }
-
-    // Supporting collections
-    match /departments/{id} { allow read: if isSignedIn(); allow write: if isAdmin(); }
-    match /employees/{id} { allow read: if isSignedIn(); allow write: if isAdmin(); }
-    match /industries/{id} { allow read: if isSignedIn(); allow write: if isAdmin(); }
-    match /customer_types/{id} { allow read: if isSignedIn(); allow write: if isAdmin(); }
-    match /design_reviews/{id} { allow read: if isSignedIn(); allow write: if isDesign(); }
-    match /debtors/{id} { allow read: if isSignedIn(); allow write: if isAccounts(); }
-    // Complaints — open to all signed-in users to avoid role-check failures
-    match /complaints/{id} { allow read: if isSignedIn(); allow write: if isSignedIn(); }
-    match /technical_templates/{id} { allow read: if isSignedIn(); allow write: if isDesign(); }
-    match /forecasts/{id} { allow read: if isSignedIn(); allow write: if isSales() || isAdmin(); }
-    match /approvals/{id} { allow read: if isSignedIn(); allow write: if isSignedIn(); }
   }
 }

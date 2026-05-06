@@ -120,8 +120,8 @@ export default function CustomerForm({ customer, onClose }: CustomerFormProps) {
 
   return (
     <Dialog open onOpenChange={onClose}>
-      <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col p-0">
-        <DialogHeader className="p-6 pb-2">
+      <DialogContent className="max-w-2xl w-full max-h-[90vh] flex flex-col p-0 overflow-hidden">
+        <DialogHeader className="px-6 pt-6 pb-4 border-b border-slate-100 shrink-0">
           <DialogTitle className="text-2xl font-bold">
             {customer ? 'Edit Customer' : 'Add New Customer Master'}
           </DialogTitle>
@@ -129,7 +129,7 @@ export default function CustomerForm({ customer, onClose }: CustomerFormProps) {
         
         <ScrollArea className="flex-1 px-6 py-4">
           <form id="customer-form" onSubmit={handleSubmit} className="space-y-6">
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="customerId">Customer ID *</Label>
                 <Input 
@@ -152,7 +152,7 @@ export default function CustomerForm({ customer, onClose }: CustomerFormProps) {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Industry *</Label>
                 <Select 
@@ -301,7 +301,7 @@ export default function CustomerForm({ customer, onClose }: CustomerFormProps) {
           </form>
         </ScrollArea>
 
-        <DialogFooter className="p-6 bg-slate-50 border-t border-slate-100">
+        <DialogFooter className="px-6 py-4 bg-slate-50 border-t border-slate-100 shrink-0">
           <Button variant="outline" onClick={onClose} disabled={loading}>Cancel</Button>
           <Button type="submit" form="customer-form" disabled={loading}>
             {loading ? 'Saving...' : (customer ? 'Update' : 'Add Customer')}
